@@ -53,7 +53,7 @@ sub as_html {
         MT::Util::encode_html($asset->url),
         MT::Util::encode_html($fname);
     if ($tracking eq 1) {
-        my $track_code = 'onclick="javascript:_gaq.push(['_trackPageview', this.pathname]);" ';
+        my $track_code = 'onclick="javascript:_gaq.push([\'_trackPageview\', this.pathname]);" ';
         $html =~ s/<a /<a $track_code/i;
     }
     return $param->{enclose} ? $asset->enclose($html) : $html;

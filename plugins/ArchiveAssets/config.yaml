@@ -1,7 +1,7 @@
 id: ArchiveAssets
 name: Archive Assets
 description: <__trans phrase="Allowing users to upload Archives into their Movable Type.">
-#schema_version: 1
+schema_version: 1
 version: 0.1
 l10n_class: ArchiveAssets::L10N
 

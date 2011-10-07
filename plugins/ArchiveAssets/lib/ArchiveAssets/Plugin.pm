@@ -14,6 +14,7 @@ sub _cb_cms_pre_save_asset {
 
 sub _cb_param_asset_options {
     my ( $cb, $app, $param, $tmpl ) = @_;
+    return unless (($param->{url} || '') =~ /zip|lzh|gz|rar$/);
     my $plugin = MT->component("ArchiveAssets");
     my $host = $tmpl->getElementById('tags')
       or return;
@@ -25,23 +26,19 @@ sub _cb_param_asset_options {
             label_class => "no-header"
         }
     );
-    my ($label, $html);
-    if ($param->{url} =~ /zip|lzh|gz|rar$/) {
-        $label = $plugin->translate('Tracking this File');
-        $html  = '<input type="checkbox" name="tracking" id="tracking" value="1" /><label for="tracking">' . $label . '</label>';
-    } else {
-        $html  = '<input type="hidden" name="tracking" id="tracking" value="0" />';
-    }
+    my $label = $plugin->translate('Tracking this File');
+    my $html  = '<input type="checkbox" name="tracking" id="tracking" value="1" />&nbsp;<label for="tracking">' . $label . '</label>';
     $add->innerHTML($html);
     $tmpl->insertBefore($add, $host);
 }
 
 sub _cb_param_edit_asset {
     my ( $cb, $app, $param, $tmpl ) = @_;
+    return unless (($param->{asset_type} || '') eq 'archive');
     my $plugin = MT->component("ArchiveAssets");
     my $asset = $param->{asset};
     my $tracking = $asset->meta('tracking', @_);
-    my $checked;
+    my $checked = '';
     if ($tracking->{tracking} eq 1) {
         $checked = ' checked="checked"';
     }
@@ -54,13 +51,8 @@ sub _cb_param_edit_asset {
             label_class => "no-header"
         }
     );
-    my ($label, $html);
-    if ($param->{asset_type} eq 'archive') {
-        $label = $plugin->translate('Tracking this File');
-        $html  = '<input type="checkbox" name="tracking" id="tracking" value="1"' . $checked . ' /><label for="tracking">' . $label . '</label>';
-    } else {
-        $html  = '<input type="hidden" name="tracking" id="tracking" value="0" />';
-    }
+    my $label = $plugin->translate('Tracking this File');
+    my $html  = '<input type="checkbox" name="tracking" id="tracking" value="1"' . $checked . ' />&nbsp;<label for="tracking">' . $label . '</label>';
     $add->innerHTML($html);
     $tmpl->insertBefore($add, $host);
 }
@@ -204,7 +196,7 @@ sub extract {
         eval { require Archive::Rar; };
         $err = $@;
         if (! $@) {
-            my $rar = Archive::Rar->new( -archive => $archive );
+            my $rar = Archive::Rar->new( -archive => $filename );
             #$rar->List( );
             my $res = $rar->Extract( );
         }
