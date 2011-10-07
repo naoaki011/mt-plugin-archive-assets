@@ -1,16 +1,19 @@
 package Archive::Tar::File;
 use strict;
 
+use Carp                ();
 use IO::File;
 use File::Spec::Unix    ();
 use File::Spec          ();
 use File::Basename      ();
 
+### avoid circular use, so only require;
+require Archive::Tar;
 use Archive::Tar::Constant;
 
 use vars qw[@ISA $VERSION];
-@ISA        = qw[Archive::Tar];
-$VERSION    = '0.02';
+#@ISA        = qw[Archive::Tar];
+$VERSION    = '1.78';
 
 ### set value to 1 to oct() it during the unpack ###
 my $tmpl = [
@@ -154,13 +157,13 @@ Raw tar header -- not useful for most users
 
 =head1 Methods
 
-=head2 new( file => $path )
+=head2 Archive::Tar::File->new( file => $path )
 
 Returns a new Archive::Tar::File object from an existing file.
 
 Returns undef on failure.
 
-=head2 new( data => $path, $data, $opt )
+=head2 Archive::Tar::File->new( data => $path, $data, $opt )
 
 Returns a new Archive::Tar::File object from data.
 
@@ -171,7 +174,7 @@ tar header), which are described above in the Accessors section.
 
 Returns undef on failure.
 
-=head2 new( chunk => $chunk )
+=head2 Archive::Tar::File->new( chunk => $chunk )
 
 Returns a new Archive::Tar::File object from a raw 512-byte tar
 archive chunk.
@@ -233,23 +236,23 @@ sub _new_from_chunk {
 
 sub _new_from_file {
     my $class       = shift;
-    my $path        = shift;        
-    
+    my $path        = shift;
+
     ### path has to at least exist
     return unless defined $path;
-    
+
     my $type        = __PACKAGE__->_filetype($path);
     my $data        = '';
 
-    READ: { 
+    READ: {
         unless ($type == DIR ) {
             my $fh = IO::File->new;
-        
+
             unless( $fh->open($path) ) {
                 ### dangling symlinks are fine, stop reading but continue
                 ### creating the object
                 last READ if $type == SYMLINK;
-                
+
                 ### otherwise, return from this function --
                 ### anything that's *not* a symlink should be
                 ### resolvable
@@ -266,6 +269,29 @@ sub _new_from_file {
     my @items       = qw[mode uid gid size mtime];
     my %hash        = map { shift(@items), $_ } (lstat $path)[2,4,5,7,9];
 
+    if (ON_VMS) {
+        ### VMS has two UID modes, traditional and POSIX.  Normally POSIX is
+        ### not used.  We currently do not have an easy way to see if we are in
+        ### POSIX mode.  In traditional mode, the UID is actually the VMS UIC.
+        ### The VMS UIC has the upper 16 bits is the GID, which in many cases
+        ### the VMS UIC will be larger than 209715, the largest that TAR can
+        ### handle.  So for now, assume it is traditional if the UID is larger
+        ### than 0x10000.
+
+        if ($hash{uid} > 0x10000) {
+            $hash{uid} = $hash{uid} & 0xFFFF;
+        }
+
+        ### The file length from stat() is the physical length of the file
+        ### However the amount of data read in may be more for some file types.
+        ### Fixed length files are read past the logical EOF to end of the block
+        ### containing.  Other file types get expanded on read because record
+        ### delimiters are added.
+
+        my $data_len = length $data;
+        $hash{size} = $data_len if $hash{size} < $data_len;
+
+    }
     ### you *must* set size == 0 on symlinks, or the next entry will be
     ### though of as the contents of the symlink, which is wrong.
     ### this fixes bug #7937
@@ -360,12 +386,15 @@ sub _prefix_and_file {
     my @dirs = File::Spec->splitdir( $dirs );
 
     ### so sometimes the last element is '' -- probably when trailing
-    ### dir slashes are encountered... this is is of course pointless,
+    ### dir slashes are encountered... this is of course pointless,
     ### so remove it
     pop @dirs while @dirs and not length $dirs[-1];
 
     ### if it's a directory, then $file might be empty
     $file = pop @dirs if $self->is_dir and not length $file;
+
+    ### splitting ../ gives you the relative path in native syntax
+    map { $_ = '..' if $_  eq '-' } @dirs if ON_VMS;
 
     my $prefix = File::Spec::Unix->catdir(
                         grep { length } $vol, @dirs
@@ -376,7 +405,7 @@ sub _prefix_and_file {
 sub _filetype {
     my $self = shift;
     my $file = shift;
-    
+
     return unless defined $file;
 
     return SYMLINK  if (-l $file);	# Symlink
@@ -411,7 +440,25 @@ sub _downgrade_to_plainfile {
     return 1;
 }
 
-=head2 full_path
+=head2 $bool = $file->extract( [ $alternative_name ] )
+
+Extract this object, optionally to an alternative name.
+
+See C<< Archive::Tar->extract_file >> for details.
+
+Returns true on success and false on failure.
+
+=cut
+
+sub extract {
+    my $self = shift;
+
+    local $Carp::CarpLevel += 1;
+
+    return Archive::Tar->_extract_file( $self, @_ );
+}
+
+=head2 $path = $file->full_path
 
 Returns the full path from the tar header; this is basically a
 concatenation of the C<prefix> and C<name> fields.
@@ -429,7 +476,7 @@ sub full_path {
 }
 
 
-=head2 validate
+=head2 $bool = $file->validate
 
 Done by Archive::Tar internally when reading the tar file:
 validate the header against the checksum to ensure integer tar file.
@@ -445,10 +492,17 @@ sub validate {
 
     ### don't know why this one is different from the one we /write/ ###
     substr ($raw, 148, 8) = "        ";
-	return unpack ("%16C*", $raw) == $self->chksum ? 1 : 0;
+
+    ### bug #43513: [PATCH] Accept wrong checksums from SunOS and HP-UX tar
+    ### like GNU tar does. See here for details:
+    ### http://www.gnu.org/software/tar/manual/tar.html#SEC139
+    ### so we do both a signed AND unsigned validate. if one succeeds, that's
+    ### good enough
+	return (   (unpack ("%16C*", $raw) == $self->chksum)
+	        or (unpack ("%16c*", $raw) == $self->chksum)) ? 1 : 0;
 }
 
-=head2 has_content
+=head2 $bool = $file->has_content
 
 Returns a boolean to indicate whether the current object has content.
 Some special files like directories and so on never will have any
@@ -462,7 +516,7 @@ sub has_content {
     return defined $self->data() && length $self->data() ? 1 : 0;
 }
 
-=head2 get_content
+=head2 $content = $file->get_content
 
 Returns the current content for the in-memory file
 
@@ -473,7 +527,7 @@ sub get_content {
     $self->data( );
 }
 
-=head2 get_content_by_ref
+=head2 $cref = $file->get_content_by_ref
 
 Returns the current content for the in-memory file as a scalar
 reference. Normal users won't need this, but it will save memory if
@@ -489,7 +543,7 @@ sub get_content_by_ref {
     return \$self->{data};
 }
 
-=head2 replace_content( $content )
+=head2 $bool = $file->replace_content( $content )
 
 Replace the current content of the file with the new content. This
 only affects the in-memory archive, not the on-disk version until
@@ -508,7 +562,7 @@ sub replace_content {
     return 1;
 }
 
-=head2 rename( $new_name )
+=head2 $bool = $file->rename( $new_name )
 
 Rename the current file to $new_name.
 
@@ -522,7 +576,7 @@ Returns true on success and false on failure.
 sub rename {
     my $self = shift;
     my $path = shift;
-    
+
     return unless defined $path;
 
     my ($prefix,$file) = $self->_prefix_and_file( $path );
@@ -533,6 +587,32 @@ sub rename {
 	return 1;
 }
 
+=head2 $bool = $file->chown( $user [, $group])
+
+Change owner of $file to $user. If a $group is given that is changed
+as well. You can also pass a single parameter with a colon separating the
+use and group as in 'root:wheel'.
+
+Returns true on success and false on failure.
+
+=cut
+
+sub chown {
+    my $self = shift;
+    my $uname = shift;
+    return unless defined $uname;
+    my $gname;
+    if (-1 != index($uname, ':')) {
+	($uname, $gname) = split(/:/, $uname);
+    } else {
+	$gname = shift if @_ > 0;
+    }
+
+    $self->uname( $uname );
+    $self->gname( $gname ) if $gname;
+	return 1;
+}
+
 =head1 Convenience methods
 
 To quickly check the type of a C<Archive::Tar::File> object, you can
@@ -540,49 +620,49 @@ use the following methods:
 
 =over 4
 
-=item is_file
+=item $file->is_file
 
 Returns true if the file is of type C<file>
 
-=item is_dir
+=item $file->is_dir
 
 Returns true if the file is of type C<dir>
 
-=item is_hardlink
+=item $file->is_hardlink
 
 Returns true if the file is of type C<hardlink>
 
-=item is_symlink
+=item $file->is_symlink
 
 Returns true if the file is of type C<symlink>
 
-=item is_chardev
+=item $file->is_chardev
 
 Returns true if the file is of type C<chardev>
 
-=item is_blockdev
+=item $file->is_blockdev
 
 Returns true if the file is of type C<blockdev>
 
-=item is_fifo
+=item $file->is_fifo
 
 Returns true if the file is of type C<fifo>
 
-=item is_socket
+=item $file->is_socket
 
 Returns true if the file is of type C<socket>
 
-=item is_longlink
+=item $file->is_longlink
 
 Returns true if the file is of type C<LongLink>.
 Should not happen after a successful C<read>.
 
-=item is_label
+=item $file->is_label
 
 Returns true if the file is of type C<Label>.
 Should not happen after a successful C<read>.
 
-=item is_unknown
+=item $file->is_unknown
 
 Returns true if the file type is C<unknown>
 
