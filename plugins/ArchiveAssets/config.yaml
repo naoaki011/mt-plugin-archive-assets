@@ -1,8 +1,9 @@
 id: ArchiveAssets
 name: Archive Assets
-description: 'Allowing users to upload Archives into their Movable Type blog.'
+description: <__trans phrase="Allowing users to upload Archives into their Movable Type.">
 #schema_version: 1
 version: 0.1
+l10n_class: ArchiveAssets::L10N
 
 object_types:
   asset.archive: MT::Asset::Archive
@@ -19,17 +20,17 @@ settings:
 #    scope: blog
 blog_config_template: >
           <p>
-            <label for="insert_pagetracker">Insert GoogleAnalytics PageTracker code:</label>
+            <label for="insert_pagetracker"><__trans phrase="Insert GoogleAnalytics PageTracker code:"></label>
             <input type="checkbox" name="insert_pagetracker" value="1"<mt:if name="insert_pagetracker"> checked="checked"</mt:if> />
           </p>
-#          <p>
-#            <label for="delete_extracted">Extract and Delete Archives:</label>
-#            <input type="checkbox" name="delete_extracted" value="1"<mt:if name="delete_extracted"> checked="checked"</mt:if> />
-#          </p>
-#          <p>
-#            <label for="overwrite_extracts">Overwrite Extracted Files:</label>
-#            <input type="checkbox" name="overwrite_extracts" value="1"<mt:if name="overwrite_extracts"> checked="checked"</mt:if> />
-#          </p>
+          #<p>
+          #  <label for="delete_extracted"><__trans phrase="Extract and Delete Archives:"></label>
+          #  <input type="checkbox" name="delete_extracted" value="1"<mt:if name="delete_extracted"> checked="checked"</mt:if> />
+          #</p>
+          #<p>
+          #  <label for="overwrite_extracts"><__trans phrase="Overwrite Extracted Files:"></label>
+          #  <input type="checkbox" name="overwrite_extracts" value="1"<mt:if name="overwrite_extracts"> checked="checked"</mt:if> />
+          #</p>
 callbacks:
   template_param.asset_options:   $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_options
   template_param.edit_asset:      $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_edit_asset
