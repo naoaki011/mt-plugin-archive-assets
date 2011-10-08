@@ -14,8 +14,8 @@ sub extensions {
     my $pkg = shift;
     return $pkg->SUPER::extensions([
         qr/zip/i,
-        qr/lzh/i,
         qr/gz/i,
+        qr/lzh/i,
         qr/rar/i,
     ]);
 }

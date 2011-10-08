@@ -62,6 +62,171 @@ sub _cb_param_asset_insert {
     my $asset = $tmpl->context->stash('asset')
       or return;
     return if ($asset->class ne 'archive');
+
+}
+
+sub _cb_cms_upload_archive {
+    my ( $eh, %args ) = @_;
+    my $app = MT->instance();
+    return unless ( $app->param( 'extract_zip' ) );
+    return if ( $app->param( 'dialog' ) );
+    my $blog = $app->blog
+      or return;
+    if (! $blog ) {
+        return MT->translate( 'Invalid request.' );
+    }
+    $app->validate_magic()
+      or return MT->translate( 'Permission denied.' );
+    my $user = $app->user
+      or return;
+    if (! is_user_can( $blog, $user, 'upload' ) ) {
+        return MT->translate( 'Permission denied.' );
+    }
+    my $plugin = MT->component( 'ArchiveAssets' );
+    my $filename = $args{ file };
+    require File::Basename;
+    (my $site_path = $blog->site_path) =~ s!\\!/!g;
+    (my $directory = File::Basename::dirname( $filename ))  =~ s!\\!/!g;
+    $directory  =~ s!$site_path!%r!;
+    my $extracted = extract(
+      File::Basename::basename( $filename ),
+      $directory,
+      &allowed_filename_func($app)
+    );
+    require MT::Asset;
+    foreach my $file (@$extracted) {
+        if (! Encode::is_utf8($file)) {
+            $file = Encode::decode('utf8', $file);
+        }
+        $file =~ s/^\/*//;
+        my $basename = File::Basename::basename($file);
+        my $asset_pkg = MT::Asset->handler_for_file($basename);
+        my $ext = ( File::Basename::fileparse( $file, qr/[A-Za-z0-9]+$/ ) )[2];
+        (my $filepath = File::Spec->catfile($directory , $file)) =~ s!\\!/!g;
+        require LWP::MediaTypes;
+        my $mimetype = LWP::MediaTypes::guess_media_type($filepath);
+        my $obj = $asset_pkg->load({
+            'file_path' => $filepath,
+            'blog_id' => $blog->id,
+        }) || $asset_pkg->new;
+        my $is_new = not $obj->id;
+        $filepath =~ s!$site_path!%r!;
+        $obj->label($basename) if $is_new;
+        $obj->file_path($filepath);
+        $obj->url($filepath);
+        $obj->blog_id($blog->id);
+        $obj->file_name($basename);
+        $obj->file_ext($ext);
+        $is_new ? $obj->created_by( $app->user->id ) : $obj->modified_by( $app->user->id );
+        $obj->mime_type($mimetype) if $mimetype;
+        $obj->save();
+    }
+    my $asset = $args{ asset };
+    $asset->remove or die $asset->errstr
+      if $app->param( 'delete_asset' );
+}
+
+sub _cb_param_asset_upload {
+    my ( $cb, $app, $param, $tmpl ) = @_;
+    return unless ( $tmpl->name eq 'include/asset_upload.tmpl' );
+    return if $app->param( 'dialog_view' );
+    eval { require Archive::Zip };
+    return if $@;
+    my $blog = $app->blog
+      or return;
+    if (! $blog ) {
+        return MT->translate( 'Invalid request.' );
+    }
+    my $user = $app->user;
+    if (! is_user_can( $blog, $user, 'upload' ) ) {
+        return MT->translate( 'Permission denied.' );
+    }
+    my $plugin = MT->component( 'ArchiveAssets' );
+    my $pointer_field = $tmpl->getElementById( 'file' );
+    my $nodeset = $tmpl->createElement( 'app:setting', {
+        id => 'extract_zip',
+        label => $plugin->translate( 'Archive' ),
+        label_class => 'no-header',
+        required => 0,
+    } );
+    my $innerHTML = <<MTML;
+        <label><input type="checkbox" name="extract_zip" id="extract_zip" value="1" />
+        <__trans_section component="ArchiveAssets"><__trans phrase="Extract Archive"></__trans_section>
+        </label>
+        <script type="text/javascript">
+        jQuery(function() {
+            var setting = jQuery("#extract_zip-field").hide();
+            jQuery("#file").change(function() {
+                if (/\\.zip\$/.test(jQuery(this).val().toLowerCase())) {
+                    setting.show();
+                } else if (/\\.tz\$/.test(jQuery(this).val().toLowerCase())) {
+                    setting.show();
+                } else {
+                    setting.hide();
+                }
+            });
+        });
+        </script>
+MTML
+    $nodeset->innerHTML( $innerHTML );
+    $tmpl->insertAfter( $nodeset, $pointer_field );
+
+    $pointer_field = $tmpl->getElementById( 'extract_zip' );
+    $nodeset = $tmpl->createElement( 'app:setting', {
+        id => 'delete_asset',
+        label => $plugin->translate( 'Delete Archive at Extracted.' ),
+        label_class => 'no-header',
+        required => 0,
+    } );
+    $innerHTML = <<'MTML';
+        <label><input type="checkbox" name="delete_asset" id="delete_asset" value="1" />
+        <__trans_section component="ArchiveAssets"><__trans phrase="Delete Archive at Extracted."></__trans_section>
+        </label>
+        <script type="text/javascript">
+        jQuery(function() {
+            var delete_archive = jQuery("#delete_asset-field").hide();
+            jQuery("#extract_zip").click(function() {
+                delete_archive[jQuery(this).attr("checked") ? "show" : "hide"]();
+            });
+        });
+        </script>
+MTML
+    if ( $plugin->get_config_value('delete_extracted', 'blog:'.$blog->id) || 0 ) {
+        $innerHTML .= <<'MTML';
+        <script type="text/javascript">
+        jQuery(function() {
+            jQuery("#delete_asset").attr('checked', true);
+        });
+        </script>
+MTML
+    }
+    $nodeset->innerHTML( $innerHTML );
+    $tmpl->insertAfter( $nodeset, $pointer_field );
+}
+
+sub _cb_source_asset_replace {
+    my ($cb, $app, $tmpl) = @_;
+    return unless ( $app->param( 'extract_zip' ) );
+    return if ( $app->param( 'dialog_view' ) );
+    my $blog = $app->blog
+      or return;
+    if (! $blog ) {
+        return MT->translate( 'Invalid request.' );
+    }
+    $app->validate_magic()
+      or return MT->translate( 'Permission denied.' );
+    my $delete_extracted = $app->param( 'delete_asset' ) || 0;
+    my $field = qq{
+    <input type="hidden" name="extract_zip" id="extract_zip" value="1" />
+    <input type="hidden" name="delete_asset" id="delete_asset" value="$delete_extracted" />
+    };
+    my $old = qq{<div class="error-message">};
+    $$tmpl =~ s!$old!$field$old!;
+}
+
+sub _cb_cms_filtered_list_param_asset {
+    my $cb = shift;
+    my ( $app, $res, $objs ) = @_;
 }
 
 sub extract_asset {
@@ -77,15 +242,17 @@ sub extract_asset {
     if (! is_user_can( $blog, $user, 'upload' ) ) {
         return MT->translate( 'Permission denied.' );
     }
+    my $plugin = MT->component("ArchiveAssets");
+    my $delete_extracted = $plugin->get_config_value('delete_extracted', 'blog:'.$blog->id) || 0;
     my @ids = $app->param('id');
-    my $site_path = $blog->site_path;
     require MT::Asset;
     require File::Basename;
+    (my $site_path = $blog->site_path) =~ s!\\!/!g;
     foreach my $id (@ids) {
         my $asset = MT::Asset->load($id);
         next if ($asset->class ne 'archive');
-        (my $directory = File::Basename::dirname( $asset->file_path ))
-          =~ s!$site_path!%r!;
+        (my $directory = File::Basename::dirname( $asset->file_path ))  =~ s!\\!/!g;
+        $directory  =~ s!$site_path!%r!;
         my $extracted = extract(
           $asset->file_name,
           File::Basename::dirname( $asset->file_path ),
@@ -99,20 +266,27 @@ sub extract_asset {
             my $basename = File::Basename::basename($file);
             my $asset_pkg = MT::Asset->handler_for_file($basename);
             my $ext = ( File::Basename::fileparse( $file, qr/[A-Za-z0-9]+$/ ) )[2];
-            my $filepath = File::Spec->catfile($directory , $file);
+            (my $filepath = File::Spec->catfile($directory , $file)) =~ s!\\!/!g;
+            require LWP::MediaTypes;
+            my $mimetype = LWP::MediaTypes::guess_media_type($filepath);
             my $obj = $asset_pkg->load({
                 'file_path' => $filepath,
                 'blog_id' => $blog->id,
             }) || $asset_pkg->new;
             my $is_new = not $obj->id;
+            $filepath =~ s!$site_path!%r!;
+            $obj->label($basename) if $is_new;
             $obj->file_path($filepath);
-            $obj->url("%r/$file");
+            $obj->url($filepath);
             $obj->blog_id($blog->id);
             $obj->file_name($basename);
             $obj->file_ext($ext);
-            $obj->created_by( $app->user->id );
+            $is_new ? $obj->created_by( $app->user->id ) : $obj->modified_by( $app->user->id );
+            $obj->mime_type($mimetype) if $mimetype;
             $obj->save();
         }
+        $asset->remove or die $asset->errstr
+          if $delete_extracted;
     }
     $app->call_return( extracted => 1 );
 }
@@ -190,15 +364,6 @@ sub extract {
                     $new_name;
                 }
             } @files));
-        }
-    }
-    elsif ($filename =~ m/\.rar$/i) {
-        eval { require Archive::Rar; };
-        $err = $@;
-        if (! $@) {
-            my $rar = Archive::Rar->new( -archive => $filename );
-            #$rar->List( );
-            my $res = $rar->Extract( );
         }
     }
     chdir($cwd);

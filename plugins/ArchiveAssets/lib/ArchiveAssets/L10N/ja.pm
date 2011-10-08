@@ -12,7 +12,11 @@ use vars qw( %Lexicon );
 	'Extract and Delete Archives:' => '解凍後にアーカイブを削除する:',
 	'Overwrite Extracted Files:' => '解凍されたファイルで上書きする:',
 	'Extract' => 'アーカイブを解凍する',
+	'Archive' => '圧縮ファイル',
+	'Archives' => '圧縮ファイル',
 	'Tracking this File' => 'このファイルをTrackingする',
+	'Extract Archive' => '圧縮ファイルを解凍する',
+	'Delete Archive at Extracted.' => '解凍後に圧縮ファイルを削除する',
 );
 
 1;

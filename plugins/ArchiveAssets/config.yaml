@@ -12,9 +12,9 @@ settings:
   insert_pagetracker:
     default: 1
     scope: blog
-#  delete_extracted:
-#    default: 0
-#    scope: blog
+  delete_extracted:
+    default: 0
+    scope: blog
 #  overwrite_extracts:
 #    default: 1
 #    scope: blog
@@ -23,19 +23,23 @@ blog_config_template: >
             <label for="insert_pagetracker"><__trans phrase="Insert GoogleAnalytics PageTracker code:"></label>
             <input type="checkbox" name="insert_pagetracker" value="1"<mt:if name="insert_pagetracker"> checked="checked"</mt:if> />
           </p>
-          #<p>
-          #  <label for="delete_extracted"><__trans phrase="Extract and Delete Archives:"></label>
-          #  <input type="checkbox" name="delete_extracted" value="1"<mt:if name="delete_extracted"> checked="checked"</mt:if> />
-          #</p>
+          <p>
+            <label for="delete_extracted"><__trans phrase="Extract and Delete Archives:"></label>
+            <input type="checkbox" name="delete_extracted" value="1"<mt:if name="delete_extracted"> checked="checked"</mt:if> />
+          </p>
           #<p>
           #  <label for="overwrite_extracts"><__trans phrase="Overwrite Extracted Files:"></label>
           #  <input type="checkbox" name="overwrite_extracts" value="1"<mt:if name="overwrite_extracts"> checked="checked"</mt:if> />
           #</p>
 callbacks:
-  template_param.asset_options:   $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_options
-  template_param.edit_asset:      $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_edit_asset
-  template_param.asset_insert:    $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_insert
+  MT::App::CMS::template_param.asset_options:   $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_options
+  MT::App::CMS::template_param.edit_asset:      $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_edit_asset
+#  MT::App::CMS::template_param.asset_insert:    $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_insert
   cms_pre_save.asset:             $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_pre_save_asset
+  cms_upload_file.archive:           $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_upload_archive
+  MT::App::CMS::template_param.asset_upload:    $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_upload
+  MT::App::CMS::template_source.asset_replace:  $ArchiveAssets::ArchiveAssets::Plugin::_cb_source_asset_replace
+#  cms_filtered_list_param.asset:  $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_filtered_list_param_asset
 applications:
   cms:
     list_actions:
