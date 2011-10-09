@@ -291,6 +291,61 @@ sub extract_asset {
     $app->call_return( extracted => 1 );
 }
 
+sub extract_current {
+    my ($app) = @_;
+    my $blog = $app->blog
+      or return;
+    if (! $blog ) {
+        return MT->translate( 'Invalid request.' );
+    }
+    $app->validate_magic()
+      or return MT->translate( 'Permission denied.' );
+    my $user = $app->user;
+    if (! is_user_can( $blog, $user, 'upload' ) ) {
+        return MT->translate( 'Permission denied.' );
+    }
+    require MT::Asset;
+    require File::Basename;
+    (my $site_path = $blog->site_path) =~ s!\\!/!g;
+    my $asset = MT::Asset->load($app->param('id'))
+      or return;
+    next if ($asset->class ne 'archive');
+    (my $directory = File::Basename::dirname( $asset->file_path ))  =~ s!\\!/!g;
+    $directory  =~ s!$site_path!%r!;
+    my $extracted = extract(
+      $asset->file_name,
+      File::Basename::dirname( $asset->file_path ),
+      &allowed_filename_func($app)
+    );
+    foreach my $file (@$extracted) {
+        if (! Encode::is_utf8($file)) {
+            $file = Encode::decode('utf8', $file);
+        }
+        $file =~ s/^\/*//;
+        my $basename = File::Basename::basename($file);
+        my $asset_pkg = MT::Asset->handler_for_file($basename);
+        my $ext = ( File::Basename::fileparse( $file, qr/[A-Za-z0-9]+$/ ) )[2];
+        (my $filepath = File::Spec->catfile($directory , $file)) =~ s!\\!/!g;
+        require LWP::MediaTypes;
+        my $mimetype = LWP::MediaTypes::guess_media_type($filepath);
+        my $obj = $asset_pkg->load({
+            'file_path' => $filepath,
+            'blog_id' => $blog->id,
+        }) || $asset_pkg->new;
+        my $is_new = not $obj->id;
+        $filepath =~ s!$site_path!%r!;
+        $obj->label($basename) if $is_new;
+        $obj->file_path($filepath);
+        $obj->url($filepath);
+        $obj->blog_id($blog->id);
+        $obj->file_name($basename);
+        $obj->file_ext($ext);
+        $is_new ? $obj->created_by( $app->user->id ) : $obj->modified_by( $app->user->id );
+        $obj->mime_type($mimetype) if $mimetype;
+        $obj->save();
+    }
+    $app->call_return( extracted => 1 );
+}
 
 sub extract {
     my ($filename, $dist, $allowed_filename) = @_;
@@ -404,6 +459,11 @@ sub allowed_filename_func {
         }
         return 1;
     };
+}
+
+sub _is_archive {
+    my $asset = shift;
+    (($asset->class || '') eq 'archive') ? return 1 : return 0;
 }
 
 sub is_user_can {

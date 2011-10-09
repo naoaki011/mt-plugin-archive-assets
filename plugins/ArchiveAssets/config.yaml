@@ -19,18 +19,18 @@ settings:
 #    default: 1
 #    scope: blog
 blog_config_template: >
-          <p>
-            <label for="insert_pagetracker"><__trans phrase="Insert GoogleAnalytics PageTracker code:"></label>
-            <input type="checkbox" name="insert_pagetracker" value="1"<mt:if name="insert_pagetracker"> checked="checked"</mt:if> />
-          </p>
-          <p>
-            <label for="delete_extracted"><__trans phrase="Extract and Delete Archives:"></label>
-            <input type="checkbox" name="delete_extracted" value="1"<mt:if name="delete_extracted"> checked="checked"</mt:if> />
-          </p>
-          #<p>
-          #  <label for="overwrite_extracts"><__trans phrase="Overwrite Extracted Files:"></label>
-          #  <input type="checkbox" name="overwrite_extracts" value="1"<mt:if name="overwrite_extracts"> checked="checked"</mt:if> />
-          #</p>
+    <p>
+      <label for="insert_pagetracker"><__trans phrase="Insert GoogleAnalytics PageTracker code:"></label>
+      <input type="checkbox" name="insert_pagetracker" value="1"<mt:if name="insert_pagetracker"> checked="checked"</mt:if> />
+    </p>
+    <p>
+      <label for="delete_extracted"><__trans phrase="Extract and Delete Archives:"></label>
+      <input type="checkbox" name="delete_extracted" value="1"<mt:if name="delete_extracted"> checked="checked"</mt:if> />
+    </p>
+    #<p>
+    #  <label for="overwrite_extracts"><__trans phrase="Overwrite Extracted Files:"></label>
+    #  <input type="checkbox" name="overwrite_extracts" value="1"<mt:if name="overwrite_extracts"> checked="checked"</mt:if> />
+    #</p>
 callbacks:
   MT::App::CMS::template_param.asset_options:   $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_options
   MT::App::CMS::template_param.edit_asset:      $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_edit_asset
@@ -42,6 +42,14 @@ callbacks:
 #  cms_filtered_list_param.asset:  $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_filtered_list_param_asset
 applications:
   cms:
+    page_actions:
+      asset:
+        extract_archive: 
+          label: 'Extract Archive'
+          order: 100
+          mode: extract_current
+          permission: upload
+          condition: $ArchiveAssets::ArchiveAssets::Plugin::_is_archive
     list_actions:
       asset:
         extract:
@@ -49,3 +57,6 @@ applications:
           code: $ArchiveAssets::ArchiveAssets::Plugin::extract_asset
           order: 400
           permission: upload
+          js_message: extract
+    methods:
+      extract_current: $ArchiveAssets::ArchiveAssets::Plugin::extract_current
