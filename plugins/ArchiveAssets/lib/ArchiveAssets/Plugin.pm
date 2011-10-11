@@ -83,16 +83,16 @@ sub _cb_cms_upload_archive {
         return MT->translate( 'Permission denied.' );
     }
     my $plugin = MT->component( 'ArchiveAssets' );
-    my $filename = $args{ file };
+    (my $filename = $args{ file }) =~ s!\\!/!g;;
     require File::Basename;
     (my $site_path = $blog->site_path) =~ s!\\!/!g;
     (my $directory = File::Basename::dirname( $filename ))  =~ s!\\!/!g;
-    $directory  =~ s!$site_path!%r!;
     my $extracted = extract(
       File::Basename::basename( $filename ),
       $directory,
       &allowed_filename_func($app)
     );
+    $directory  =~ s!$site_path!%r!;
     require MT::Asset;
     foreach my $file (@$extracted) {
         if (! Encode::is_utf8($file)) {
