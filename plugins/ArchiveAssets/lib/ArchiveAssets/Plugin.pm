@@ -86,13 +86,13 @@ sub _cb_cms_upload_archive {
     (my $filename = $args{ file }) =~ s!\\!/!g;;
     require File::Basename;
     (my $site_path = $blog->site_path) =~ s!\\!/!g;
-    (my $directory = File::Basename::dirname( $filename ))  =~ s!\\!/!g;
+    (my $current = File::Basename::dirname( $filename ))  =~ s!\\!/!g;
     my $extracted = extract(
       File::Basename::basename( $filename ),
-      $directory,
+      $current,
       &allowed_filename_func($app)
     );
-    $directory  =~ s!$site_path!%r!;
+    (my $directory = $current) =~ s!$site_path!%r!;
     require MT::Asset;
     foreach my $file (@$extracted) {
         if (! Encode::is_utf8($file)) {
@@ -103,23 +103,57 @@ sub _cb_cms_upload_archive {
         my $asset_pkg = MT::Asset->handler_for_file($basename);
         my $ext = ( File::Basename::fileparse( $file, qr/[A-Za-z0-9]+$/ ) )[2];
         (my $filepath = File::Spec->catfile($directory , $file)) =~ s!\\!/!g;
-        require LWP::MediaTypes;
-        my $mimetype = LWP::MediaTypes::guess_media_type($filepath);
-        my $obj = $asset_pkg->load({
-            'file_path' => $filepath,
-            'blog_id' => $blog->id,
-        }) || $asset_pkg->new;
-        my $is_new = not $obj->id;
-        $filepath =~ s!$site_path!%r!;
-        $obj->label($basename) if $is_new;
-        $obj->file_path($filepath);
-        $obj->url($filepath);
-        $obj->blog_id($blog->id);
-        $obj->file_name($basename);
-        $obj->file_ext($ext);
-        $is_new ? $obj->created_by( $app->user->id ) : $obj->modified_by( $app->user->id );
-        $obj->mime_type($mimetype) if $mimetype;
-        $obj->save();
+
+        if ($basename =~ m/\.html?$|\.mtml$|\.tmpl$|\.php$|\.jsp$|\.asp$|\.css$|\.js$/i) {
+
+            my $tmpl_class = MT->model('template');
+            my $content = do{
+                open(my $fh, '<', File::Spec->catfile($current, $file));
+                local $/;
+                <$fh>;
+            };
+
+            $content =~ s!\t!    !g;
+
+            $content =~ s!\s+\n!\n!g;
+
+            (my $outfile = File::Spec->catfile($current, $file)) =~ s!\\!/!g;
+            $outfile =~ s!$site_path!!;
+            my $obj = $tmpl_class->load({
+                'outfile' => $outfile,
+                'blog_id' => $blog->id,
+            }) || $tmpl_class->new;
+            my $is_new = not $obj->id;
+
+            $obj->blog_id($blog->id);
+            $obj->text($content);
+            $obj->outfile($outfile);
+            $obj->type('index');
+
+            $obj->name($basename) if $is_new;
+#            $obj->identifier($identifiers{$ext} || undef) if $is_new;
+            $obj->save();
+
+        }
+        else {
+            require LWP::MediaTypes;
+            my $mimetype = LWP::MediaTypes::guess_media_type($filepath);
+            my $obj = $asset_pkg->load({
+                'file_path' => $filepath,
+                'blog_id' => $blog->id,
+            }) || $asset_pkg->new;
+            my $is_new = not $obj->id;
+            $filepath =~ s!$site_path!%r!;
+            $obj->label($basename) if $is_new;
+            $obj->file_path($filepath);
+            $obj->url($filepath);
+            $obj->blog_id($blog->id);
+            $obj->file_name($basename);
+            $obj->file_ext($ext);
+            $is_new ? $obj->created_by( $app->user->id ) : $obj->modified_by( $app->user->id );
+            $obj->mime_type($mimetype) if $mimetype;
+            $obj->save();
+        }
     }
     my $asset = $args{ asset };
     $asset->remove or die $asset->errstr
