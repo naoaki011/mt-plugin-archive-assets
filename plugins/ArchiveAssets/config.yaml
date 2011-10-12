@@ -13,11 +13,23 @@ settings:
     default: 1
     scope: blog
   delete_extracted:
-    default: 0
+    default: 1
     scope: blog
 #  overwrite_extracts:
 #    default: 1
 #    scope: blog
+  makeindex_templates:
+    default: 1
+    scope: blog
+  overwrite_templates:
+    default: 1
+    scope: blog
+  replace_tabstop:
+    default: 1
+    scope: blog
+  cleanup_templates:
+    default: 1
+    scope: blog
 blog_config_template: >
     <p>
       <label for="insert_pagetracker"><__trans phrase="Insert GoogleAnalytics PageTracker code:"></label>
@@ -31,6 +43,22 @@ blog_config_template: >
     #  <label for="overwrite_extracts"><__trans phrase="Overwrite Extracted Files:"></label>
     #  <input type="checkbox" name="overwrite_extracts" value="1"<mt:if name="overwrite_extracts"> checked="checked"</mt:if> />
     #</p>
+    <p>
+      <label for="makeindex_templates"><__trans phrase="Make Index Templates:"></label>
+      <input type="checkbox" name="makeindex_templates" value="1"<mt:if name="makeindex_templates"> checked="checked"</mt:if> />
+    </p>
+    #<p>
+    #  <label for="overwrite_templates"><__trans phrase="Overwrite Templates:"></label>
+    #  <input type="checkbox" name="overwrite_templates" value="1"<mt:if name="overwrite_templates"> checked="checked"</mt:if> />
+    #</p>
+    <p>
+      <label for="replace_tabstop"><__trans phrase="Replace tabs to spaces:"></label>
+      <input type="checkbox" name="replace_tabstop" value="1"<mt:if name="replace_tabstop"> checked="checked"</mt:if> />
+    </p>
+    <p>
+      <label for="cleanup_templates"><__trans phrase="Cleanup Templates:"></label>
+      <input type="checkbox" name="cleanup_templates" value="1"<mt:if name="cleanup_templates"> checked="checked"</mt:if> />
+    </p>
 callbacks:
   MT::App::CMS::template_param.asset_options:   $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_options
   MT::App::CMS::template_param.edit_asset:      $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_edit_asset

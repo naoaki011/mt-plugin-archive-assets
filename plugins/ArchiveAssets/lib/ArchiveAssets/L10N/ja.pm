@@ -17,6 +17,14 @@ use vars qw( %Lexicon );
 	'Tracking this File' => 'このファイルをTrackingする',
 	'Extract Archive' => '圧縮ファイルを解凍する',
 	'Delete Archive at Extracted.' => '解凍後に圧縮ファイルを削除する',
+	'Make Index Templates:' => 'インデックステンプレートを作成する:',
+	'Overwrite Templates:' => 'テンプレートを上書きする:',
+	'Replace tabs to spaces:' => 'タブをスペースに置き換える:',
+	'Cleanup Templates:' => 'テンプレートを整形する:',
+	'Make Text files as Index Templates.' => 'テキストファイルをインデックステムプレートに登録する',
+	'such as css,js or html.' => 'css、jsやhtmlなど.',
+	'Overwrite Index Templates of same Outfile.' => '出力ファイル名が同じテンプレートを上書きする',
+	'turn off this. always create new index template.' => 'オフにした場合、常に新規テンプレートが作成されます',
 );
 
 1;

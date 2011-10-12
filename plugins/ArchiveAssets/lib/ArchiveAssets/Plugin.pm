@@ -103,20 +103,18 @@ sub _cb_cms_upload_archive {
         my $asset_pkg = MT::Asset->handler_for_file($basename);
         my $ext = ( File::Basename::fileparse( $file, qr/[A-Za-z0-9]+$/ ) )[2];
         (my $filepath = File::Spec->catfile($directory , $file)) =~ s!\\!/!g;
-
-        if ($basename =~ m/\.html?$|\.mtml$|\.tmpl$|\.php$|\.jsp$|\.asp$|\.css$|\.js$/i) {
-
+        if ( ($basename =~ m/\.html?$|\.mtml$|\.tmpl$|\.php$|\.jsp$|\.asp$|\.css$|\.js$/i)
+          && $app->param( 'make_index' ) ) {
             my $tmpl_class = MT->model('template');
             my $content = do{
                 open(my $fh, '<', File::Spec->catfile($current, $file));
                 local $/;
                 <$fh>;
             };
-
-            $content =~ s!\t!    !g;
-
-            $content =~ s!\s+\n!\n!g;
-
+            $content =~ s!\t!    !g
+              if ( $plugin->get_config_value('replace_tabstop', 'blog:'.$blog->id) || 1 );
+            $content =~ s!\s+\n!\n!g
+              if ( $plugin->get_config_value('cleanup_templates', 'blog:'.$blog->id) || 1 );
             (my $outfile = File::Spec->catfile($current, $file)) =~ s!\\!/!g;
             $outfile =~ s!$site_path!!;
             my $obj = $tmpl_class->load({
@@ -124,16 +122,22 @@ sub _cb_cms_upload_archive {
                 'blog_id' => $blog->id,
             }) || $tmpl_class->new;
             my $is_new = not $obj->id;
-
-            $obj->blog_id($blog->id);
-            $obj->text($content);
-            $obj->outfile($outfile);
-            $obj->type('index');
-
-            $obj->name($basename) if $is_new;
-#            $obj->identifier($identifiers{$ext} || undef) if $is_new;
-            $obj->save();
-
+            my $new_obj;
+            if (( $plugin->get_config_value('overwrite_templates', 'blog:'.$blog->id) || 1 )
+              && (! $is_new )) {
+                $new_obj = $obj;
+            }
+            else {
+                $new_obj = $is_new ? $obj : $obj->clone();
+                $new_obj->id( undef );
+            }
+            $new_obj->blog_id($blog->id);
+            $new_obj->text($content);
+            $new_obj->outfile($outfile);
+            $new_obj->type('index');
+            $new_obj->name($basename) if $is_new;
+            $new_obj->identifier(MT::Util::dirify($basename) || undef) if $is_new;
+            $new_obj->save();
         }
         else {
             require LWP::MediaTypes;
@@ -225,7 +229,7 @@ MTML
         });
         </script>
 MTML
-    if ( $plugin->get_config_value('delete_extracted', 'blog:'.$blog->id) || 0 ) {
+    if ( $plugin->get_config_value('delete_extracted', 'blog:'.$blog->id) || 1 ) {
         $innerHTML .= <<'MTML';
         <script type="text/javascript">
         jQuery(function() {
@@ -236,6 +240,41 @@ MTML
     }
     $nodeset->innerHTML( $innerHTML );
     $tmpl->insertAfter( $nodeset, $pointer_field );
+
+    $pointer_field = $tmpl->getElementById( 'delete_asset' );
+    $nodeset = $tmpl->createElement( 'app:setting', {
+        id => 'make_index',
+        label => $plugin->translate( 'Make Text files as Index Templates.' ),
+        label_class => 'no-header',
+        required => 0,
+    } );
+    $innerHTML = <<'MTML';
+        <label><input type="checkbox" name="make_index" id="make_index" value="1" />
+        <__trans_section component="ArchiveAssets"><__trans phrase="Make Text files as Index Templates."></__trans_section>
+        </label>
+        <script type="text/javascript">
+        jQuery(function() {
+            var make_index = jQuery("#make_index-field").hide();
+            jQuery("#extract_zip").click(function() {
+                make_index[jQuery(this).attr("checked") ? "show" : "hide"]();
+            });
+        });
+        </script>
+        <span class="hint"><__trans_section component="ArchiveAssets"><__trans phrase="such as css,js or html."></__trans_section></span>
+
+MTML
+    if ( $plugin->get_config_value('makeindex_templates', 'blog:'.$blog->id) || 1 ) {
+        $innerHTML .= <<'MTML';
+        <script type="text/javascript">
+        jQuery(function() {
+            jQuery("#make_index").attr('checked', true);
+        });
+        </script>
+MTML
+    }
+    $nodeset->innerHTML( $innerHTML );
+    $tmpl->insertAfter( $nodeset, $pointer_field );
+
 }
 
 sub _cb_source_asset_replace {
@@ -249,10 +288,14 @@ sub _cb_source_asset_replace {
     }
     $app->validate_magic()
       or return MT->translate( 'Permission denied.' );
-    my $delete_extracted = $app->param( 'delete_asset' ) || 0;
+    my $delete_extracted = $app->param( 'delete_asset' ) || 1;
+    my $make_index = $app->param( 'make_index' ) || 1;
+    my $overwrite_index = $app->param( 'overwrite_index' ) || 1;
     my $field = qq{
     <input type="hidden" name="extract_zip" id="extract_zip" value="1" />
     <input type="hidden" name="delete_asset" id="delete_asset" value="$delete_extracted" />
+    <input type="hidden" name="make_index" id="make_index" value="$make_index" />
+    <input type="hidden" name="overwrite_index" id="overwrite_index" value="$overwrite_index" />
     };
     my $old = qq{<div class="error-message">};
     $$tmpl =~ s!$old!$field$old!;
@@ -277,7 +320,7 @@ sub extract_asset {
         return MT->translate( 'Permission denied.' );
     }
     my $plugin = MT->component("ArchiveAssets");
-    my $delete_extracted = $plugin->get_config_value('delete_extracted', 'blog:'.$blog->id) || 0;
+    my $delete_extracted = $plugin->get_config_value('delete_extracted', 'blog:'.$blog->id) || 1;
     my @ids = $app->param('id');
     require MT::Asset;
     require File::Basename;
