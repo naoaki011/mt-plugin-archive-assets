@@ -117,6 +117,7 @@ sub _cb_cms_upload_archive {
               if ( $plugin->get_config_value('cleanup_templates', 'blog:'.$blog->id) || 1 );
             (my $outfile = File::Spec->catfile($current, $file)) =~ s!\\!/!g;
             $outfile =~ s!$site_path!!;
+            $outfile =~ s!^/!!;
             my $obj = $tmpl_class->load({
                 'outfile' => $outfile,
                 'blog_id' => $blog->id,
@@ -540,7 +541,26 @@ sub allowed_filename_func {
 
 sub _is_archive {
     my $asset = shift;
+    my $app = MT->instance;
+    my $blog = $app->blog;
+    return 0 if (!$blog );
     (($asset->class || '') eq 'archive') ? return 1 : return 0;
+}
+
+sub _is_blog {
+    my $app = MT->instance;
+    my $blog = $app->blog;
+    return 0 if (!$blog );
+    return 1
+      if ( $blog->id && $blog->parent_id );
+    return 0;
+}
+
+sub _has_blog {
+    my $app = MT->instance;
+    my $blog = $app->blog;
+    return 0 if (!$blog );
+    return 1;
 }
 
 sub is_user_can {

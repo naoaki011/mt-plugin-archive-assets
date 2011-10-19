@@ -85,6 +85,7 @@ applications:
           code: $ArchiveAssets::ArchiveAssets::Plugin::extract_asset
           order: 400
           permission: upload
+          condition: $ArchiveAssets::ArchiveAssets::Plugin::_has_blog
           js_message: extract
     methods:
       extract_current: $ArchiveAssets::ArchiveAssets::Plugin::extract_current
