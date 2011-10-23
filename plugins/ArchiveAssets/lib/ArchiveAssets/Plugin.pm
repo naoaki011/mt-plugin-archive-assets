@@ -92,9 +92,23 @@ sub _cb_cms_upload_archive {
       $current,
       &allowed_filename_func($app)
     );
+    my $upload_mode = (~ oct($app->config('UploadUmask'))) & oct('777');
+    my $dir_mode = (~ oct($app->config('DirUmask'))) & oct('777');
+    my @files = grep({ $_ } map({
+        my $path = File::Spec->catfile($current, $_);
+        if (-d $path) {
+            chmod($dir_mode, $path);
+            '';
+        }
+        else {
+            chmod($upload_mode, $path);
+            [ File::Spec->catfile($current, $_), $path ];
+        }
+    } @$extracted));
     (my $directory = $current) =~ s!$site_path!%r!;
     require MT::Asset;
     foreach my $file (@$extracted) {
+        next if ($file =~ /\/$/);
         if (! Encode::is_utf8($file)) {
             $file = Encode::decode('utf8', $file);
         }
@@ -167,7 +181,7 @@ sub _cb_cms_upload_archive {
 
 sub _cb_param_asset_upload {
     my ( $cb, $app, $param, $tmpl ) = @_;
-    return unless ( $tmpl->name eq 'include/asset_upload.tmpl' );
+    return unless ( ($tmpl->name || '') eq 'include/asset_upload.tmpl' );
     return if $app->param( 'dialog_view' );
     eval { require Archive::Zip };
     return if $@;
@@ -325,6 +339,8 @@ sub extract_asset {
     my @ids = $app->param('id');
     require MT::Asset;
     require File::Basename;
+    my $upload_mode = (~ oct($app->config('UploadUmask'))) & oct('777');
+    my $dir_mode = (~ oct($app->config('DirUmask'))) & oct('777');
     (my $site_path = $blog->site_path) =~ s!\\!/!g;
     foreach my $id (@ids) {
         my $asset = MT::Asset->load($id);
@@ -336,7 +352,19 @@ sub extract_asset {
           File::Basename::dirname( $asset->file_path ),
           &allowed_filename_func($app)
         );
+        my @files = grep({ $_ } map({
+            my $path = File::Spec->catfile($directory, $_);
+            if (-d $path) {
+                chmod($dir_mode, $path);
+                '';
+            }
+            else {
+                chmod($upload_mode, $path);
+                [ File::Spec->catfile($directory, $_), $path ];
+            }
+        } @$extracted));
         foreach my $file (@$extracted) {
+            next if ($file =~ /\/$/);
             if (! Encode::is_utf8($file)) {
                 $file = Encode::decode('utf8', $file);
             }
@@ -395,7 +423,21 @@ sub extract_current {
       File::Basename::dirname( $asset->file_path ),
       &allowed_filename_func($app)
     );
+    my $upload_mode = (~ oct($app->config('UploadUmask'))) & oct('777');
+    my $dir_mode = (~ oct($app->config('DirUmask'))) & oct('777');
+    my @files = grep({ $_ } map({
+        my $path = File::Spec->catfile($directory, $_);
+        if (-d $path) {
+            chmod($dir_mode, $path);
+            '';
+        }
+        else {
+            chmod($upload_mode, $path);
+            [ File::Spec->catfile($directory, $_), $path ];
+        }
+    } @$extracted));
     foreach my $file (@$extracted) {
+        next if ($file =~ /\/$/);
         if (! Encode::is_utf8($file)) {
             $file = Encode::decode('utf8', $file);
         }
@@ -521,8 +563,8 @@ sub allowed_filename_func {
     sub {
         my ($name) = @_;
         return undef if $name =~ /Thumbs\.db/;
+        return undef if $name =~ /\.DS_Store/;
         return undef if $name =~ /__MACOSX/o;
-        return undef if $name =~ /\/$/;
         if (@deny_exts) {
             my @ret = File::Basename::fileparse( $name, @deny_exts );
             if ( $ret[2] ) {
