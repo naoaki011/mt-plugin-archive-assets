@@ -62,7 +62,9 @@ sub _cb_param_asset_insert {
     my $asset = $tmpl->context->stash('asset')
       or return;
     return if ($asset->class ne 'archive');
+    my $upload_html = $param->{ upload_html };
 
+    $param->{ upload_html } = $upload_html;
 }
 
 sub _cb_cms_upload_archive {
@@ -319,6 +321,8 @@ sub _cb_source_asset_replace {
 sub _cb_cms_filtered_list_param_asset {
     my $cb = shift;
     my ( $app, $res, $objs ) = @_;
+
+    return 1;
 }
 
 sub extract_asset {
