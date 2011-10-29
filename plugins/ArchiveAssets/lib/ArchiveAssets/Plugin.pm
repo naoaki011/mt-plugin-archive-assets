@@ -3,6 +3,7 @@ package ArchiveAssets::Plugin;
 use strict;
 use warnings;
 use MT::Template::Context;
+use MT::Util qw( offset_time_list dirify );
 
 sub _cb_cms_pre_save_asset {
     my ($cb, $app, $obj, $original) = @_;
@@ -108,6 +109,8 @@ sub _cb_cms_upload_archive {
         }
     } @$extracted));
     (my $directory = $current) =~ s!$site_path!%r!;
+    my $cb = $user->text_format || $blog->convert_paras;
+    $cb = '__default__' if $cb eq '1';
     require MT::Asset;
     foreach my $file (@$extracted) {
         next if ($file =~ /\/$/);
@@ -116,11 +119,12 @@ sub _cb_cms_upload_archive {
         }
         $file =~ s/^\/*//;
         my $basename = File::Basename::basename($file);
-        my $asset_pkg = MT::Asset->handler_for_file($basename);
         my $ext = ( File::Basename::fileparse( $file, qr/[A-Za-z0-9]+$/ ) )[2];
+        my $asset_pkg = MT::Asset->handler_for_file($basename);
         (my $filepath = File::Spec->catfile($directory , $file)) =~ s!\\!/!g;
         if ( ($basename =~ m/\.html?$|\.mtml$|\.tmpl$|\.php$|\.jsp$|\.asp$|\.css$|\.js$/i)
           && $app->param( 'make_index' ) ) {
+            my $identifier = dirify(( File::Basename::fileparse( $file, qr/\.[A-Za-z0-9]+$/ ) )[0] . '_' . $ext);
             my $tmpl_class = MT->model('template');
             my $content = do{
                 open(my $fh, '<', File::Spec->catfile($current, $file));
@@ -139,22 +143,35 @@ sub _cb_cms_upload_archive {
                 'blog_id' => $blog->id,
             }) || $tmpl_class->new;
             my $is_new = not $obj->id;
-            my $new_obj;
-            if (( $plugin->get_config_value('overwrite_templates', 'blog:'.$blog->id) || 1 )
-              && (! $is_new )) {
-                $new_obj = $obj;
+            $is_new = 1 unless ($app->param('overwrite_index') || 0);
+            $obj->identifier($identifier || undef) unless ($obj->identifier);
+            my $template_name = $is_new ? $basename : $obj->name;
+            if ($is_new) {
+                $obj->id( undef );
+                my $ident_obj = $tmpl_class->load({
+                    'identifier' => $obj->identifier,
+                    'blog_id' => $blog->id,
+                });
+                if ($ident_obj) {
+                    $obj->identifier( undef );
+                }
+                my $name_obj = $tmpl_class->load({
+                    'name' => $template_name,
+                    'blog_id' => $blog->id,
+                });
+                if ($name_obj) {
+                    my @tl = &offset_time_list( time, $blog );
+                    my $ts = sprintf "_%04d%02d%02d%02d%02d%02d", $tl[ 5 ] + 1900, $tl[ 4 ] + 1, @tl[ 3, 2, 1, 0 ];
+                    $template_name .= $ts;
+                }
             }
-            else {
-                $new_obj = $is_new ? $obj : $obj->clone();
-                $new_obj->id( undef );
-            }
-            $new_obj->blog_id($blog->id);
-            $new_obj->text($content);
-            $new_obj->outfile($outfile);
-            $new_obj->type('index');
-            $new_obj->name($basename) if $is_new;
-            $new_obj->identifier(MT::Util::dirify($basename) || undef) if $is_new;
-            $new_obj->save();
+            $obj->name($template_name);
+            $obj->blog_id($blog->id);
+            $obj->text($content);
+            $obj->outfile($outfile);
+            $obj->type('index');
+            $obj->save()
+              or die $obj->errstr;
         }
         else {
             require LWP::MediaTypes;
@@ -173,11 +190,73 @@ sub _cb_cms_upload_archive {
             $obj->file_ext($ext);
             $is_new ? $obj->created_by( $app->user->id ) : $obj->modified_by( $app->user->id );
             $obj->mime_type($mimetype) if $mimetype;
-            $obj->save();
+            $obj->save()
+              or die $obj->errstr;
+            if ($is_new && ($app->param('make_entry') || 0) && ( $app->config->Asset2Entry || $blog->theme_id eq 'photogallery_blog' || 0 )) {
+                if (is_user_can( $blog, $user, 'create_post' )) {
+                    my ($entry, $category);
+                    my $asset_basename = (File::Basename::fileparse( $obj->file_name, qr/\.[A-Za-z0-9]+$/ ))[0];
+                    my $entry_title = (dirify($asset_basename) || 'untitled' . $obj->id);
+                    my $entry_basename = lc($entry_title);
+                    require MT::Entry;
+                    $entry = MT::Entry->new;
+                    $entry->title($entry_title);
+                    $entry->basename($entry_basename);
+                    $entry->status(MT::Entry::HOLD());
+                    $entry->author_id($user->id);
+                    $entry->text('');
+                    $entry->convert_breaks($cb);
+                    $entry->blog_id($blog->id);
+                    $entry->class('entry');
+                    $entry->save
+                      or die $entry->errstr;
+                    require MT::ObjectAsset;
+                    my $object = MT::ObjectAsset->new;
+                    $object->blog_id($blog->id);
+                    $object->asset_id($obj->id);
+                    $object->object_id($entry->id);
+                    $object->object_ds('entry');
+                    $object->save
+                      or die $object->errstr;
+                    require MT::Category;
+                    my $category_label = ($app->param('category_label') || '');
+                    my $category_basename = ($app->param('category_basename') || lc($app->param('category_label')) || '');
+                    $category = MT::Category->load({
+                        'label' => $category_label,
+                        'blog_id' => $blog->id,
+                    });
+                    if (! $category) {
+                        if ( is_user_can( $blog, $user, 'edit_categories' ) ) {
+                            $category = MT::Category->new;
+                            $category->label($category_label);
+                            $category->basename($category_basename);
+                            $category->blog_id($blog->id);
+                            $category->class('category');
+                            $category->save
+                              or die $category->errstr;
+                        }
+                        else {
+                            doLog( 'Create Category Permission denied.' );
+                        }
+                    }
+                    require MT::Placement;
+                    my $placement = MT::Placement->new;
+                    $placement->blog_id($blog->id);
+                    $placement->category_id($category->id);
+                    $placement->entry_id($entry->id);
+                    $placement->is_primary(1);
+                    $placement->save
+                      or die $placement->errstr;
+                }
+                else {
+                    doLog( 'Create Entry Permission denied.' );
+                }
+            }
         }
     }
     my $asset = $args{ asset };
-    $asset->remove or die $asset->errstr
+    $asset->remove
+      or die $asset->errstr
       if $app->param( 'delete_asset' );
 }
 
@@ -292,6 +371,70 @@ MTML
     $nodeset->innerHTML( $innerHTML );
     $tmpl->insertAfter( $nodeset, $pointer_field );
 
+    $pointer_field = $tmpl->getElementById( 'make_index' );
+    $nodeset = $tmpl->createElement( 'app:setting', {
+        id => 'overwrite_index',
+        label => $plugin->translate( 'Overwrite Index Templates of same Outfile.' ),
+        label_class => 'no-header',
+        required => 0,
+    } );
+    $innerHTML = <<'MTML';
+        <label><input type="checkbox" name="overwrite_index" id="overwrite_index" value="1" />
+        <__trans_section component="ArchiveAssets"><__trans phrase="Overwrite Index Templates of same Outfile."></__trans_section>
+        </label>
+        <script type="text/javascript">
+        jQuery(function() {
+            var overwrite_index = jQuery("#overwrite_index-field").hide();
+            jQuery("#extract_zip").click(function() {
+                overwrite_index[jQuery(this).attr("checked") ? "show" : "hide"]();
+            });
+            jQuery("#make_index").click(function() {
+                overwrite_index[jQuery(this).attr("checked") ? "show" : "hide"]();
+            });
+        });
+        </script>
+        <span class="hint"><__trans_section component="ArchiveAssets"><__trans phrase="turn off this. always create new index template."></__trans_section></span>
+MTML
+    if ( $plugin->get_config_value('overwrite_templates', 'blog:'.$blog->id) || 1 ) {
+        $innerHTML .= <<'MTML';
+        <script type="text/javascript">
+        jQuery(function() {
+            jQuery("#overwrite_index").attr('checked', true);
+        });
+        </script>
+MTML
+    }
+    $nodeset->innerHTML( $innerHTML );
+    $tmpl->insertAfter( $nodeset, $pointer_field );
+
+    $pointer_field = $tmpl->getElementById( 'overwrite_index' );
+    $nodeset = $tmpl->createElement( 'app:setting', {
+        id => 'make_entry',
+        label => $plugin->translate( 'Make Entries with Asset.' ),
+        label_class => 'no-header',
+        required => 0,
+    } );
+    $innerHTML = <<'MTML';
+        <label><input type="checkbox" name="make_entry" id="make_entry" value="1" />
+        <__trans_section component="ArchiveAssets"><__trans phrase="Make Entries with Asset."></__trans_section>
+        </label><br />
+        <__trans_section component="ArchiveAssets"><__trans phrase="Category Label:"></__trans_section>
+        <input type="text" name="category_label" value="<mt:var name="category_label" escape="html">" id="category_label" class="text" style="width:20em;" />
+        <__trans_section component="ArchiveAssets"><__trans phrase="Category Basename:"></__trans_section>
+        <input type="text" name="category_basename" value="<mt:var name="category_basename" escape="html">" id="category_basename" class="text" style="width:20em;" />
+        <script type="text/javascript">
+        jQuery(function() {
+            var make_entry = jQuery("#make_entry-field").hide();
+            jQuery("#extract_zip").click(function() {
+                make_entry[jQuery(this).attr("checked") ? "show" : "hide"]();
+            });
+        });
+        </script>
+
+MTML
+    $nodeset->innerHTML( $innerHTML );
+    $tmpl->insertAfter( $nodeset, $pointer_field );
+
 }
 
 sub _cb_source_asset_replace {
@@ -305,14 +448,21 @@ sub _cb_source_asset_replace {
     }
     $app->validate_magic()
       or return MT->translate( 'Permission denied.' );
-    my $delete_extracted = $app->param( 'delete_asset' ) || 1;
-    my $make_index = $app->param( 'make_index' ) || 1;
-    my $overwrite_index = $app->param( 'overwrite_index' ) || 1;
+    my $plugin = MT->component( 'ArchiveAssets' );
+    my $delete_extracted = $app->param( 'delete_asset' ) || $plugin->get_config_value('delete_extracted', 'blog:'.$blog->id) || 1;
+    my $make_index = $app->param( 'make_index' ) || $plugin->get_config_value('makeindex_templates', 'blog:'.$blog->id) || 0;
+    my $overwrite_index = $app->param( 'overwrite_index' ) || $plugin->get_config_value('overwrite_templates', 'blog:'.$blog->id) || 0;
+    my $make_entry = $app->param( 'make_entry' ) || $app->config->Asset2Entry || $blog->theme_id eq 'photogallery_blog' || 0;
+    my $category_label = $app->param( 'category_label' ) || '';
+    my $category_basename = $app->param( 'category_basename' ) || '';
     my $field = qq{
     <input type="hidden" name="extract_zip" id="extract_zip" value="1" />
     <input type="hidden" name="delete_asset" id="delete_asset" value="$delete_extracted" />
     <input type="hidden" name="make_index" id="make_index" value="$make_index" />
     <input type="hidden" name="overwrite_index" id="overwrite_index" value="$overwrite_index" />
+    <input type="hidden" name="make_entry" id="make_entry" value="$make_entry" />
+    <input type="hidden" name="category_label" id="category_label" value="$category_label" />
+    <input type="hidden" name="category_basename" id="category_basename" value="$category_basename" />
     };
     my $old = qq{<div class="error-message">};
     $$tmpl =~ s!$old!$field$old!;

@@ -2,7 +2,7 @@ id: ArchiveAssets
 name: Archive Assets
 description: <__trans phrase="Allowing users to upload Archives into their Movable Type.">
 schema_version: 1
-version: 0.1
+version: 0.2
 l10n_class: ArchiveAssets::L10N
 
 object_types:
@@ -15,9 +15,6 @@ settings:
   delete_extracted:
     default: 1
     scope: blog
-#  overwrite_extracts:
-#    default: 1
-#    scope: blog
   makeindex_templates:
     default: 1
     scope: blog
@@ -39,20 +36,16 @@ blog_config_template: >
       <label for="delete_extracted"><__trans phrase="Extract and Delete Archives:"></label>
       <input type="checkbox" name="delete_extracted" value="1"<mt:if name="delete_extracted"> checked="checked"</mt:if> />
     </p>
-    #<p>
-    #  <label for="overwrite_extracts"><__trans phrase="Overwrite Extracted Files:"></label>
-    #  <input type="checkbox" name="overwrite_extracts" value="1"<mt:if name="overwrite_extracts"> checked="checked"</mt:if> />
-    #</p>
     <p>
-      <label for="makeindex_templates"><__trans phrase="Make Index Templates:"></label>
+      <label for="makeindex_templates"><__trans phrase="Make Index Templates(for Text Asset).:"></label>
       <input type="checkbox" name="makeindex_templates" value="1"<mt:if name="makeindex_templates"> checked="checked"</mt:if> />
     </p>
-    #<p>
-    #  <label for="overwrite_templates"><__trans phrase="Overwrite Templates:"></label>
-    #  <input type="checkbox" name="overwrite_templates" value="1"<mt:if name="overwrite_templates"> checked="checked"</mt:if> />
-    #</p>
     <p>
-      <label for="replace_tabstop"><__trans phrase="Replace tabs to spaces:"></label>
+      <label for="overwrite_templates"><__trans phrase="Overwrite Templates(If Same outfile).:"></label>
+      <input type="checkbox" name="overwrite_templates" value="1"<mt:if name="overwrite_templates"> checked="checked"</mt:if> />
+    </p>
+    <p>
+      <label for="replace_tabstop"><__trans phrase="Replace tabs to spaces(in Templates):"></label>
       <input type="checkbox" name="replace_tabstop" value="1"<mt:if name="replace_tabstop"> checked="checked"</mt:if> />
     </p>
     <p>
@@ -62,12 +55,10 @@ blog_config_template: >
 callbacks:
   MT::App::CMS::template_param.asset_options:   $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_options
   MT::App::CMS::template_param.edit_asset:      $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_edit_asset
-#  MT::App::CMS::template_param.asset_insert:    $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_insert
   cms_pre_save.asset:             $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_pre_save_asset
   cms_upload_file.archive:           $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_upload_archive
   MT::App::CMS::template_param.asset_upload:    $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_upload
   MT::App::CMS::template_source.asset_replace:  $ArchiveAssets::ArchiveAssets::Plugin::_cb_source_asset_replace
-#  cms_filtered_list_param.asset:  $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_filtered_list_param_asset
 applications:
   cms:
     page_actions:
