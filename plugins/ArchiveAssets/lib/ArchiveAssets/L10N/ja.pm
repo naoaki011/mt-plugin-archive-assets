@@ -28,6 +28,7 @@ use vars qw( %Lexicon );
 	'Make Entries with Asset.' => 'アイテムからブログ記事を作成する',
 	'Category Label:' => 'カテゴリー名:',
 	'Category Basename:' => 'カテゴリーベースネーム:',
+	'Use ExifDate for extracted Asset created on:' => 'Exif情報の作成日をアイテム作成日として使用する',
 );
 
 1;

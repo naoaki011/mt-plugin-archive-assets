@@ -27,6 +27,9 @@ settings:
   cleanup_templates:
     default: 1
     scope: blog
+  use_exifdate:
+    default: 0
+    scope: blog
 blog_config_template: >
     <p>
       <label for="insert_pagetracker"><__trans phrase="Insert GoogleAnalytics PageTracker code:"></label>
@@ -52,13 +55,18 @@ blog_config_template: >
       <label for="cleanup_templates"><__trans phrase="Cleanup Templates:"></label>
       <input type="checkbox" name="cleanup_templates" value="1"<mt:if name="cleanup_templates"> checked="checked"</mt:if> />
     </p>
+    <p style="dispaly:*show_use_exifdate*;">
+      <label for="use_exifdate"><__trans phrase="Use ExifDate for extracted Asset created on:"></label>
+      <input type="checkbox" name="use_exifdate" value="1"<mt:if name="use_exifdate"> checked="checked"</mt:if> />
+    </p>
 callbacks:
   MT::App::CMS::template_param.asset_options:   $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_options
   MT::App::CMS::template_param.edit_asset:      $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_edit_asset
-  cms_pre_save.asset:             $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_pre_save_asset
-  cms_upload_file.archive:           $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_upload_archive
+  cms_pre_save.asset:                           $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_pre_save_asset
+  cms_upload_file.archive:                      $ArchiveAssets::ArchiveAssets::Plugin::_cb_cms_upload_archive
   MT::App::CMS::template_param.asset_upload:    $ArchiveAssets::ArchiveAssets::Plugin::_cb_param_asset_upload
   MT::App::CMS::template_source.asset_replace:  $ArchiveAssets::ArchiveAssets::Plugin::_cb_source_asset_replace
+  MT::App::CMS::template_source.blog_config_template: $ArchiveAssets::ArchiveAssets::Plugin::_cb_source_blog_config
 applications:
   cms:
     page_actions:

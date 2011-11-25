@@ -190,6 +190,26 @@ sub _cb_cms_upload_archive {
             $obj->file_ext($ext);
             $is_new ? $obj->created_by( $app->user->id ) : $obj->modified_by( $app->user->id );
             $obj->mime_type($mimetype) if $mimetype;
+            eval { require Image::ExifTool; };
+            if (!$@) {
+                my $exif = new Image::ExifTool;
+                if (my $exif_data = $exif->ImageInfo( $obj->file_path )) {
+                    if ($plugin->get_config_value('use_exifdate', 'blog:'.$blog->id) || 0) {
+                        my $date = $exif_data->{ 'DateTimeOriginal' } || '';
+                        if ($date) {
+                            my ($year, $mon, $day, $hour, $min, $sec)
+                              = ($date =~ /(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/);
+                            my $ts = sprintf("%04d-%02d-%02d %02d:%02d:%02d", $year, $mon-1, $day, $hour, $min, $sec);
+                            $obj->created_on( $ts ) if $is_new;
+                           $obj->modified_on( $ts ) if $is_new;
+                        }
+                    }
+                #    my $rotation = $exif_data->{Orientation} || '';
+                #    my $gps = $exif_data->{GPSPosition} || '';
+                #    my $gpslon = $exif_data->{GPSLongitude} || '';
+                #    my $gpslat = $exif_data->{GPSLatitude} || '';
+                }
+            }
             $obj->save()
               or die $obj->errstr;
             if ($is_new && ($app->param('make_entry') || 0) && ( $app->config->Asset2Entry || $blog->theme_id eq 'photogallery_blog' || 0 )) {
@@ -471,7 +491,7 @@ sub _cb_source_asset_replace {
 sub _cb_cms_filtered_list_param_asset {
     my $cb = shift;
     my ( $app, $res, $objs ) = @_;
-
+    
     return 1;
 }
 
@@ -773,6 +793,16 @@ sub is_user_can {
         }
     }
     return $perm;
+}
+
+sub _cb_source_blog_config {
+    my ( $cb, $app, $tmpl ) = @_;
+    my $disp = 'hidden';
+    eval { require Image::ExifTool; };
+    if (!$@) {
+        $disp = 'block';
+    }
+    $$tmpl =~ s/\*show_use_exifdate\*/$disp/sg;
 }
 
 sub doLog {
